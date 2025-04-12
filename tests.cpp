@@ -1,6 +1,7 @@
 #include "engine.hpp"
 #include <cassert>
 #include <iostream>
+#include <chrono>
 
 // We may add to these later on, but will provide additional tests before the
 // deadline
@@ -76,11 +77,13 @@ void test_multiple_matches() {
   assert(order_exists(ob, 4));
   Order order_lookup = lookup_order_by_id(ob, 4);
   assert(order_lookup.quantity == 2);
+  std::cout << "order at address " << &order_lookup << "has " <<order_lookup.quantity << std::endl;
 
   // Modify remaining order partially.
   modify_order_by_id(ob, 4, 1);
   assert(order_exists(ob, 4));
   order_lookup = lookup_order_by_id(ob, 4);
+  std::cout << "order at address " << &order_lookup << "has " <<order_lookup.quantity << std::endl;
   assert(order_lookup.quantity == 1);
 
   // Fully modify the order.
@@ -716,6 +719,9 @@ void test_get_volume_all_encompassing() {
 }
 
 int main() {
+  auto start = std::chrono::steady_clock::now();
+  for (int i = 0; i<20; ++i)
+  {
   test_lookup_order();
   test_simple_match_and_modify();
   test_multiple_matches();
@@ -746,5 +752,10 @@ int main() {
   test_get_volume_complex3();
   test_get_volume_all_encompassing();
   std::cout << "All tests passed." << std::endl;
+  }
+
+  auto end = std::chrono::steady_clock::now();
+  const std::chrono::duration<double> elapsed_seconds = end - start;
+  std::cout << "elapsed: " << elapsed_seconds.count() << std::endl;
   return 0;
 }

@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <list>
 #include <map>
+#include <vector>
+#include <unordered_map>
+#include <memory>
 
 enum class Side : uint8_t { BUY, SELL };
 
@@ -18,10 +21,17 @@ struct Order {
   Side side;
 };
 
+struct PriceLevel{
+  long unsigned int index;
+  std::vector<std::shared_ptr<Order>> orders;
+  int volume;
+};
+
 // You CAN and SHOULD change this
 struct Orderbook {
-  std::map<PriceType, std::list<Order>, std::greater<PriceType>> buyOrders;
-  std::map<PriceType, std::list<Order>> sellOrders;
+  std::map<PriceType, PriceLevel, std::greater<PriceType>> buyOrders;
+  std::map<PriceType, PriceLevel> sellOrders;
+  std::unordered_map<IdType, std::shared_ptr<Order>> orders;
 };
 
 extern "C" {
