@@ -29,9 +29,11 @@ struct PriceLevel{
 
 // You CAN and SHOULD change this
 struct Orderbook {
+  IdType firstId;
   std::map<PriceType, PriceLevel, std::greater<PriceType>> buyOrders;
   std::map<PriceType, PriceLevel> sellOrders;
-  std::unordered_map<IdType, std::shared_ptr<Order>> orders;
+  std::vector<std::shared_ptr<Order>> orders;
+  // std::unordered_map<IdType, std::shared_ptr<Order>> orders;
 };
 
 extern "C" {

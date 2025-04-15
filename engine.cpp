@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <memory>
 
+
+
 // This is an example correct implementation
 // It is INTENTIONALLY suboptimal
 // You are encouraged to rewrite as much or as little as you'd like
@@ -42,15 +44,22 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
   uint32_t matchCount = 0;
   QuantityType quantity= incoming.quantity;
    // Create a copy to modify the quantity
-
   if (incoming.side == Side::BUY) {
     // For a BUY, match with sell orders priced at or below the order's price.
     matchCount = process_orders(incoming, orderbook.sellOrders, std::less_equal<>(), quantity);
     if (quantity > 0){
       auto order = std::make_shared<Order>(incoming);
       order->quantity = quantity;
+      if(orderbook.orders.size()==0){
+        orderbook.firstId = order->id;
+      }
+      
       orderbook.buyOrders[order->price].orders.push_back(order);
-      orderbook.orders[order->id] = order;
+      orderbook.orders.push_back(order);
+      
+
+    }else{
+      orderbook.orders.push_back(nullptr);
 
     }
   } 
@@ -60,8 +69,14 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
     if (quantity > 0){
       auto order = std::make_shared<Order>(incoming);
       order->quantity = quantity;
+      if(orderbook.orders.size()==0){
+        orderbook.firstId = order->id;
+      }
       orderbook.sellOrders[order->price].orders.push_back(order);
-      orderbook.orders[order->id] = order;
+      orderbook.orders.push_back(order);
+      
+    }else{
+      orderbook.orders.push_back(nullptr);
     }
       
   }
@@ -102,9 +117,11 @@ void modify_order_by_id(Orderbook &orderbook, IdType order_id,
                         QuantityType new_quantity) {
 
   // might have to check for existence
-  if (orderbook.orders.find(order_id)!= orderbook.orders.end()){
-    orderbook.orders[order_id]->quantity = new_quantity;
+  uint32_t index = order_id - orderbook.firstId;
+  if (index<orderbook.orders.size() && orderbook.orders[index]){
+    orderbook.orders[index]->quantity = new_quantity;
   }
+
   // if (modify_order_in_map(orderbook.buyOrders, order_id, new_quantity))
   //   return;
   // if (modify_order_in_map(orderbook.sellOrders, order_id, new_quantity))
@@ -155,8 +172,9 @@ uint32_t get_volume_at_level(Orderbook &orderbook, Side side,
 // Functions below here don't need to be performant. Just make sure they're
 // correct
 Order lookup_order_by_id(Orderbook &orderbook, IdType order_id) {
-  if ((orderbook.orders.find(order_id)!= orderbook.orders.end()) &&  orderbook.orders[order_id]->quantity>0){
-    return *orderbook.orders[order_id];
+  uint32_t index = order_id - orderbook.firstId;
+  if (index<orderbook.orders.size() && orderbook.orders[index] && orderbook.orders[index]->quantity>0){
+    return *orderbook.orders[index];
   }
   throw std::runtime_error("Order not found");
 }
@@ -164,7 +182,8 @@ Order lookup_order_by_id(Orderbook &orderbook, IdType order_id) {
 bool order_exists(Orderbook &orderbook, IdType order_id) {
 
   
-  if ((orderbook.orders.find(order_id)!= orderbook.orders.end()) &&  orderbook.orders[order_id]->quantity>0){
+  uint32_t index = order_id - orderbook.firstId;
+  if (index<orderbook.orders.size() && orderbook.orders[index] && orderbook.orders[index]->quantity>0){
     return true;
   }
   return false;
