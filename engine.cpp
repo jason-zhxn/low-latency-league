@@ -5,7 +5,6 @@
 #include <memory>
 
 
-
 // This is an example correct implementation
 // It is INTENTIONALLY suboptimal
 // You are encouraged to rewrite as much or as little as you'd like
@@ -24,6 +23,7 @@ uint32_t process_orders(const Order &order, OrderMap &ordersMap, Condition cond,
       auto currOrder = ordersList[index];
       QuantityType trade = std::min(orderQuantity, currOrder->quantity);
       orderQuantity -= trade;
+      ordersAtPrice.volume -= trade;
       currOrder->quantity -= trade;
       ++matchCount;
       if (currOrder->quantity == 0)
@@ -48,18 +48,13 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
     // For a BUY, match with sell orders priced at or below the order's price.
     matchCount = process_orders(incoming, orderbook.sellOrders, std::less_equal<>(), quantity);
     if (quantity > 0){
-      auto order = std::make_shared<Order>(incoming);
+      Order* order = new Order(incoming);
       order->quantity = quantity;
-      if(orderbook.orders.size()==0){
-        orderbook.firstId = order->id;
-      }
-      
       orderbook.buyOrders[order->price].orders.push_back(order);
-      orderbook.orders.push_back(order);
+      orderbook.buyOrders[order->price].volume += quantity;
+      orderbook.orders[order->id]= order;
       
-
-    }else{
-      orderbook.orders.push_back(nullptr);
+      
 
     }
   } 
@@ -67,65 +62,35 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
     // For a SELL, match with buy orders priced at or above the order's price.
     matchCount = process_orders(incoming, orderbook.buyOrders, std::greater_equal<>(), quantity);
     if (quantity > 0){
-      auto order = std::make_shared<Order>(incoming);
+      Order* order = new Order(incoming);
       order->quantity = quantity;
-      if(orderbook.orders.size()==0){
-        orderbook.firstId = order->id;
-      }
       orderbook.sellOrders[order->price].orders.push_back(order);
-      orderbook.orders.push_back(order);
+      orderbook.sellOrders[order->price].volume += quantity;
+      orderbook.orders[order->id] = order;
       
-    }else{
-      orderbook.orders.push_back(nullptr);
+      
     }
       
   }
   return matchCount;
 }
 
-// Templated helper to cancel an order within a given orders map.
-template <typename OrderMap>
-bool modify_order_in_map(OrderMap &ordersMap, IdType order_id,
-                         QuantityType new_quantity) {
-
-
-  for (auto it = ordersMap.begin(); it != ordersMap.end();) {
-    auto &priceLevel = it->second;
-    auto& ordersList = priceLevel.orders;
-    for (unsigned long index = priceLevel.index; index<ordersList.size(); index++) {
-      auto currOrder = ordersList[index];
-      if (currOrder->id == order_id) {
-        if (new_quantity == 0){
-          priceLevel.index++;
-          return true;
-        }
-        else {
-          currOrder->quantity = new_quantity;
-          return true;
-        }
-      } 
-    }
-    if (priceLevel.index>ordersList.size())
-      it = ordersMap.erase(it);
-    else
-      ++it;
-  }
-  return false;
-}
 
 void modify_order_by_id(Orderbook &orderbook, IdType order_id,
                         QuantityType new_quantity) {
 
   // might have to check for existence
-  uint32_t index = order_id - orderbook.firstId;
-  if (index<orderbook.orders.size() && orderbook.orders[index]){
-    orderbook.orders[index]->quantity = new_quantity;
+  if (order_id<orderbook.orders.size() && orderbook.orders[order_id]){
+    
+    int q = orderbook.orders[order_id]->quantity;
+    if (orderbook.orders[order_id]->side == Side::BUY) {
+      orderbook.buyOrders[orderbook.orders[order_id]->price].volume -= (q-new_quantity);
+    } else {
+      orderbook.sellOrders[orderbook.orders[order_id]->price].volume -= (q-new_quantity);
+    } 
+    orderbook.orders[order_id]->quantity = new_quantity;
   }
 
-  // if (modify_order_in_map(orderbook.buyOrders, order_id, new_quantity))
-  //   return;
-  // if (modify_order_in_map(orderbook.sellOrders, order_id, new_quantity))
-  //   return;
 }
 
 template <typename OrderMap>
@@ -144,46 +109,26 @@ std::optional<Order> lookup_order_in_map(OrderMap &ordersMap, IdType order_id) {
 
 uint32_t get_volume_at_level(Orderbook &orderbook, Side side,
                              PriceType quantity) {
-  uint32_t total = 0;
-  if (side == Side::BUY) {
-    auto buy_orders = orderbook.buyOrders.find(quantity);
-    if (buy_orders == orderbook.buyOrders.end()) {
-      return 0;
-    }
-    auto& priceLevel = buy_orders->second;
-    auto& orderList = priceLevel.orders;
-    for (unsigned long index = priceLevel.index; index<orderList.size(); index++) {
-      total += orderList[index]->quantity;
-    }
-  } else if (side == Side::SELL) {
-    auto sell_orders = orderbook.sellOrders.find(quantity);
-    if (sell_orders == orderbook.sellOrders.end()) {
-      return 0;
-    }
-    auto& priceLevel = sell_orders->second;
-    auto& orderList = priceLevel.orders;
-    for (unsigned long index = priceLevel.index; index<orderList.size(); index++) {
-      total += orderList[index]->quantity;
-    }
+  if (side == Side::SELL) {
+    return orderbook.sellOrders[quantity].volume;
   }
-  return total;
+
+  return orderbook.buyOrders[quantity].volume;
+
 }
 
 // Functions below here don't need to be performant. Just make sure they're
 // correct
 Order lookup_order_by_id(Orderbook &orderbook, IdType order_id) {
-  uint32_t index = order_id - orderbook.firstId;
-  if (index<orderbook.orders.size() && orderbook.orders[index] && orderbook.orders[index]->quantity>0){
-    return *orderbook.orders[index];
+  if (order_id<orderbook.orders.size() && orderbook.orders[order_id] && orderbook.orders[order_id]->quantity>0){
+    return *orderbook.orders[order_id];
   }
   throw std::runtime_error("Order not found");
 }
 
 bool order_exists(Orderbook &orderbook, IdType order_id) {
-
-  
-  uint32_t index = order_id - orderbook.firstId;
-  if (index<orderbook.orders.size() && orderbook.orders[index] && orderbook.orders[index]->quantity>0){
+    
+  if (order_id<orderbook.orders.size() && orderbook.orders[order_id] && orderbook.orders[order_id]->quantity>0){
     return true;
   }
   return false;

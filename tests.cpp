@@ -37,6 +37,7 @@ void test_simple_match_and_modify() {
   Order sellOrder{1, 100, 10, Side::SELL};
   uint32_t matches = match_order(ob, sellOrder);
   assert(matches == 0);
+  
 
   // A buy order that partially matches the sell order.
   Order buyOrder{2, 100, 5, Side::BUY};

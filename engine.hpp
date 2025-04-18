@@ -6,6 +6,7 @@
 #include <vector>
 #include <unordered_map>
 #include <memory>
+#include <optional>
 
 enum class Side : uint8_t { BUY, SELL };
 
@@ -22,18 +23,24 @@ struct Order {
 };
 
 struct PriceLevel{
-  long unsigned int index;
-  std::vector<std::shared_ptr<Order>> orders;
-  int volume;
+  unsigned int index = 0;
+  std::vector<Order*> orders;
+  unsigned int volume=0;
 };
 
 // You CAN and SHOULD change this
 struct Orderbook {
-  IdType firstId;
   std::map<PriceType, PriceLevel, std::greater<PriceType>> buyOrders;
   std::map<PriceType, PriceLevel> sellOrders;
-  std::vector<std::shared_ptr<Order>> orders;
-  // std::unordered_map<IdType, std::shared_ptr<Order>> orders;
+  std::array<Order*, 10000> orders{};
+
+  ~Orderbook() {
+    for (auto& order : orders) {
+      if (order != nullptr) {
+        delete order;
+      }
+    }
+  }
 };
 
 extern "C" {
