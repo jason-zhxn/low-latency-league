@@ -2,13 +2,15 @@
 
 #include <cstdint>
 #include <list>
-#include <map>
 #include <vector>
-#include <unordered_map>
 #include <memory>
-#include <optional>
+#include <array>
 
 enum class Side : uint8_t { BUY, SELL };
+
+inline constexpr uint32_t MIN_PRICE = 3500;
+// inline constexpr uint32_t MIN_PRICE = 0;
+inline constexpr uint32_t PRICE_RANGE = 1000;
 
 using IdType = uint32_t;
 using PriceType = uint16_t;
@@ -22,25 +24,41 @@ struct Order {
   Side side;
 };
 
+
 struct PriceLevel{
   unsigned int index = 0;
-  std::vector<Order*> orders;
+  unsigned int size = 0;
+  std::vector<Order*> orders{};
   unsigned int volume=0;
+
+  PriceLevel(){
+    orders.reserve(10000);
+  }
 };
 
 // You CAN and SHOULD change this
 struct Orderbook {
-  std::map<PriceType, PriceLevel, std::greater<PriceType>> buyOrders;
-  std::map<PriceType, PriceLevel> sellOrders;
-  std::array<Order*, 10000> orders{};
+  // sorted highest buy to lowest buy
+  std::array<PriceLevel, PRICE_RANGE+1> buyOrders{};
+  // sorted lowest sell to highest sell
+  std::array<PriceLevel, PRICE_RANGE+1> sellOrders{};
+  int minSellIndex = PRICE_RANGE;
+  int maxSellIndex=-1;
 
-  ~Orderbook() {
-    for (auto& order : orders) {
-      if (order != nullptr) {
-        delete order;
-      }
-    }
-  }
+  int minBuyIndex = PRICE_RANGE;
+  int maxBuyIndex=-1;
+  
+  std::array<Order, 10000> orders{};
+
+
+
+  // ~Orderbook() {
+  //   for (auto& order : orders) {
+  //     if (order != nullptr) {
+  //       delete order;
+  //     }
+  //   }
+  // }
 };
 
 extern "C" {

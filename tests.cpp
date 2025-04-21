@@ -78,13 +78,12 @@ void test_multiple_matches() {
   assert(order_exists(ob, 4));
   Order order_lookup = lookup_order_by_id(ob, 4);
   assert(order_lookup.quantity == 2);
-  std::cout << "order at address " << &order_lookup << "has " <<order_lookup.quantity << std::endl;
-
+  
   // Modify remaining order partially.
   modify_order_by_id(ob, 4, 1);
   assert(order_exists(ob, 4));
   order_lookup = lookup_order_by_id(ob, 4);
-  std::cout << "order at address " << &order_lookup << "has " <<order_lookup.quantity << std::endl;
+  
   assert(order_lookup.quantity == 1);
 
   // Fully modify the order.
@@ -122,6 +121,7 @@ void test_sell_order_matching_buy() {
   assert(!order_exists(ob, 6));
   assert(order_exists(ob, 8));
   order_lookup = lookup_order_by_id(ob, 8);
+  std::cout << "order at address " << &order_lookup << "has " <<order_lookup.quantity << std::endl;
   assert(order_lookup.quantity == 1);
 
   std::cout << "Test 3 passed." << std::endl;
@@ -524,6 +524,7 @@ void test_get_volume_orders_different_levels() {
   Order buyOrder2{104, 101, 5, Side::BUY};
   match_order(ob, buyOrder1);
   match_order(ob, buyOrder2);
+  std::cout << get_volume_at_level(ob, Side::BUY, 100) << std::endl;
   uint32_t volume_buy_100 = get_volume_at_level(ob, Side::BUY, 100);
   uint32_t volume_buy_101 = get_volume_at_level(ob, Side::BUY, 101);
   assert(volume_buy_100 == 10);
@@ -719,7 +720,63 @@ void test_get_volume_all_encompassing() {
   std::cout << "Test 28 passed." << std::endl;
 }
 
+
+void profile_match_order() {
+  Orderbook ob;
+  // Insert BUY orders.
+  Order buyOrder1{500, 100, 20, Side::BUY};
+  Order buyOrder2{501, 100, 15, Side::BUY};
+  Order buyOrder3{502, 99, 10, Side::BUY};
+  match_order(ob, buyOrder1);
+  match_order(ob, buyOrder2);
+  match_order(ob, buyOrder3);
+
+  // Insert SELL orders that will trigger matching on crossing prices.
+  
+  bool switch_side = true;
+  for (IdType i = 0; i < 1000; ++i) {
+    if (switch_side) {
+      IdType id = 503 + i;
+      Order buyOrder{id, 102, 15, Side::BUY};
+      match_order(ob, buyOrder);
+    }
+    else{
+      IdType id = 503 + i;
+      Order sellOrder2{
+          id, 102, 30,
+          Side::SELL}; // No match because BUY orders are at 100 and 99.
+      match_order(ob, sellOrder2);
+    }
+    switch_side = !switch_side;
+    
+  }
+  // After matching:
+  // - buyOrder1 is fully filled (20 out of 25 matched).
+  // - buyOrder2 is partially filled: 15 - (25-20=5) = 10 remaining.
+  // - buyOrder3 remains untouched.
+
+  // Insert SELL orders that do not cross.
+  Order sellOrder2{
+      504, 102, 30,
+      Side::SELL}; // No match because BUY orders are at 100 and 99.
+  Order sellOrder3{505, 101, 10,
+                   Side::SELL}; // No match because BUY orders are below 101.
+  match_order(ob, sellOrder2);
+  match_order(ob, sellOrder3);
+
+  
+
+  // Insert a BUY order that crosses with SELL orders.
+  Order buyOrder4{506, 102, 15, Side::BUY};
+  match_order(ob, buyOrder4);
+}
+
+
 int main() {
+
+  // profile_match_order();
+
+  // Uncomment the following lines to run the tests.
   auto start = std::chrono::steady_clock::now();
   for (int i = 0; i<20; ++i)
   {

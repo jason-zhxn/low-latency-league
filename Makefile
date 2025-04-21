@@ -1,19 +1,14 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O3
-LDFLAGS = -pg
+CXXFLAGS = -std=c++23 -Wall -Wextra -O3
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 all: test
 
 test: tests.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o tests tests.cpp engine.cpp
+	$(CXX) $(CXXFLAGS) -o tests tests.cpp engine.cpp
 	./tests
 
-gprofTest: tests.cpp
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o tests tests.cpp engine.cpp
-		./tests
-	gprof tests gmon.out > report.txt
 
 submit: engine.cpp
 	$(CXX) $(CXXFLAGS) -fPIC -c engine.cpp -o engine.o
