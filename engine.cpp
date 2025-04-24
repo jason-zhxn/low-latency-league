@@ -3,29 +3,42 @@
 #include <optional>
 #include <stdexcept>
 #include <memory>
+#include <iostream>
+
+
+
+inline void set_bit(std::array<uint64_t,NUM_WORDS>& bm, int idx)   { bm[idx>>6] |=  1ULL << (idx & 63); }
+inline void clear_bit(std::array<uint64_t,NUM_WORDS>& bm, int idx) { bm[idx>>6] &= ~(1ULL << (idx & 63)); }
+
+int next_filled(const std::array<uint64_t,NUM_WORDS>& bm, int start, int max)
+{
+    int w = start >> 6;
+    uint64_t word = bm[w] & (~0ULL << (start & 63));   // mask bits < start
+
+    while (true) {
+        if (word)                         // at least one bit set
+            return (w << 6) + __builtin_ctzll(word);
+        ++w;                              // advance to next word
+        int idx = w << 6;
+        if (idx > max || w >= 16) return max + 1;   // sentinel “none”
+        word = bm[w];                     // examine next 64‑level chunk
+    }
+}
 
 
 // Templated helper to process matching orders.
 // The Condition predicate takes the price level and the incoming order price
 // and returns whether the level qualifies.
-template <typename OrderMap, typename Condition>
-uint32_t process_buy_orders(const Order &order, OrderMap &ordersMap, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
-  uint32_t matchCount = 0;
-  while (minIndex <= maxIndex && orderQuantity >0 && cond(minIndex + MIN_PRICE, order.price)){
-    if (ordersMap[minIndex].volume==0){
-      ++minIndex;
-      continue; 
-    }
+template <typename Condition>
+uint32_t process_buy_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
 
-    auto &priceLevel= ordersMap[minIndex];
+  auto &meta  = ob.sellBitmap;          // we consume sells
+  int idx     = next_filled(meta, minIndex, maxIndex);
+
+  uint32_t matchCount = 0;
+  while (idx <= maxIndex && orderQuantity && cond(idx + MIN_PRICE, order.price)){
+    auto &priceLevel= ob.sellOrders[idx];
     auto& ordersList = priceLevel.orders;
-    // if (orderQuantity>=priceLevel.volume){
-    //   orderQuantity -= priceLevel.volume;
-    //   matchCount += (ordersList.size() - priceLevel.index);
-    //   priceLevel.volume = 0;
-    //   ++minIndex;
-    //   continue;
-    // }
 
     for (long unsigned int index = priceLevel.index ;index < ordersList.size() && orderQuantity > 0;index++) {
       auto currOrder = ordersList[index];
@@ -38,8 +51,10 @@ uint32_t process_buy_orders(const Order &order, OrderMap &ordersMap, Condition c
         priceLevel.index++;
     }
 
-    if (priceLevel.volume==0){
-      ++minIndex;
+    if (priceLevel.volume==0){   
+      minIndex = idx + 1;                       // advance window
+      clear_bit(meta,idx);     // we consume sells
+      idx = next_filled(meta, minIndex, maxIndex);
     }
     else{
       return matchCount;
@@ -51,23 +66,16 @@ uint32_t process_buy_orders(const Order &order, OrderMap &ordersMap, Condition c
 }
 
 
-template <typename OrderMap, typename Condition>
-uint32_t process_sell_orders(const Order &order, OrderMap &ordersMap, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
-  uint32_t matchCount = 0;
-  while (minIndex <= maxIndex && orderQuantity >0 && cond(PRICE_RANGE+MIN_PRICE-minIndex, order.price)){
-    if (ordersMap[minIndex].volume==0){
-      ++minIndex;
-      continue;
-    }
+template < typename Condition>
+uint32_t process_sell_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
+  auto &meta  = ob.buyBitmap;          
+  int idx     = next_filled(meta, minIndex, maxIndex);
 
-    auto &priceLevel= ordersMap[minIndex];
+  uint32_t matchCount = 0;
+  while (idx <= maxIndex && orderQuantity && cond(PRICE_RANGE + MIN_PRICE - idx, order.price)){
+
+    auto &priceLevel= ob.buyOrders[idx];
     auto& ordersList = priceLevel.orders;
-    // if (orderQuantity>=priceLevel.volume){
-    //   orderQuantity -= priceLevel.volume;
-    //   matchCount += (ordersList.size() - priceLevel.index);
-    //   priceLevel.volume = 0;
-    //   continue;
-    // }
 
     for (long unsigned int index = priceLevel.index ;index < ordersList.size() && orderQuantity > 0;index++) {
       auto currOrder = ordersList[index];
@@ -80,8 +88,10 @@ uint32_t process_sell_orders(const Order &order, OrderMap &ordersMap, Condition 
         priceLevel.index++;
     }
 
-    if (priceLevel.volume==0){
-      ++minIndex;
+    if (priceLevel.volume==0){  
+      minIndex = idx+1;
+      clear_bit(meta,idx);     
+      idx     = next_filled(meta, minIndex, maxIndex);
     }
     else{
       return matchCount;
@@ -101,7 +111,7 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
    // Create a copy to modify the quantity
   if (incoming.side == Side::BUY) {
     // For a BUY, match with sell orders priced at or below the order's price.
-    matchCount = process_buy_orders(incoming, orderbook.sellOrders, std::less_equal<>(), quantity, orderbook.minSellIndex, orderbook.maxSellIndex);
+    matchCount = process_buy_orders(incoming, orderbook, std::less_equal<>(), quantity, orderbook.minSellIndex, orderbook.maxSellIndex);
     if (quantity > 0){
       // Order* order = new Order(incoming);
       Order &order = orderbook.orders[incoming.id];
@@ -114,12 +124,13 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
       int index = PRICE_RANGE - (order.price-MIN_PRICE);
       orderbook.buyOrders[index].orders.emplace_back(&order);
       orderbook.buyOrders[index].volume += quantity;
+      set_bit(orderbook.buyBitmap,index);
       orderbook.minBuyIndex = std::min(orderbook.minBuyIndex, index);
       orderbook.maxBuyIndex = std::max(orderbook.maxBuyIndex, index);
     }
   } 
   else { // Side::SELL
-    matchCount = process_sell_orders(incoming, orderbook.buyOrders, std::greater_equal<>(), quantity, orderbook.minBuyIndex, orderbook.maxBuyIndex);
+    matchCount = process_sell_orders(incoming, orderbook, std::greater_equal<>(), quantity, orderbook.minBuyIndex, orderbook.maxBuyIndex);
           // if (orderbook.sellOrders[order->price].orders.size() > 12150){
       //   std::cout << orderbook.sellOrders[order->price].orders.size() << std::endl;
       // }
@@ -133,8 +144,8 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
 
       int index = order.price-MIN_PRICE;
       orderbook.sellOrders[index].orders.emplace_back(&order);
-
       orderbook.sellOrders[index].volume += quantity;
+      set_bit(orderbook.sellBitmap,index);
 
       orderbook.minSellIndex = std::min(orderbook.minSellIndex, index);
       orderbook.maxSellIndex = std::max(orderbook.maxSellIndex, index);
@@ -163,19 +174,6 @@ void modify_order_by_id(Orderbook &orderbook, IdType order_id,
 
 }
 
-template <typename OrderMap>
-std::optional<Order> lookup_order_in_map(OrderMap &ordersMap, IdType order_id) {
-  for (const auto &[price, priceLevel] : ordersMap) {
-    auto& ordersList = priceLevel.orders;
-    auto& index = priceLevel.index;
-    for (unsigned long i = index; i<ordersList.size(); i++) {
-      if (ordersList[i].id== order_id) {
-        return ordersList[i];
-      }
-    }
-  }
-  return std::nullopt;
-}
 
 uint32_t get_volume_at_level(Orderbook &ob, Side side,
                              PriceType quantity) {
@@ -187,6 +185,7 @@ uint32_t get_volume_at_level(Orderbook &ob, Side side,
 
 
     return ob.sellOrders[quantity-MIN_PRICE].volume;
+    
     
 
 }
@@ -203,11 +202,6 @@ Order lookup_order_by_id(Orderbook &orderbook, IdType order_id) {
 bool order_exists(Orderbook &orderbook, IdType order_id) {
     
   if (order_id<orderbook.orders.size() &&  orderbook.orders[order_id].quantity>0){
-    // if (orderbook.orders[order_id].side == Side::BUY) {
-    //   return orderbook.buyOrders[PRICE_RANGE - orderbook.orders[order_id].price-MIN_PRICE].volume > 0;
-    // } else {
-    //   return orderbook.sellOrders[orderbook.orders[order_id].price-MIN_PRICE].volume > 0;
-    // }
     return true;
   }
   return false;

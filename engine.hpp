@@ -25,6 +25,8 @@ struct Order {
 };
 
 
+
+
 struct PriceLevel{
   unsigned int index = 0;
   unsigned int size = 0;
@@ -36,19 +38,30 @@ struct PriceLevel{
   }
 };
 
+constexpr int NUM_LEVELS = PRICE_RANGE + 1;  // 1001
+constexpr int WORD_BITS  = 64;
+constexpr int NUM_WORDS  = 16; // 16
+
+
+
 // You CAN and SHOULD change this
 struct Orderbook {
   // sorted highest buy to lowest buy
   std::array<PriceLevel, PRICE_RANGE+1> buyOrders{};
   // sorted lowest sell to highest sell
   std::array<PriceLevel, PRICE_RANGE+1> sellOrders{};
+  std::array<uint64_t, NUM_WORDS> buyBitmap{};
+  std::array<uint64_t, NUM_WORDS> sellBitmap{};
+
+
+
   int minSellIndex = PRICE_RANGE;
-  int maxSellIndex=-1;
+  int maxSellIndex= -1;
 
   int minBuyIndex = PRICE_RANGE;
-  int maxBuyIndex=-1;
+  int maxBuyIndex = -1;
   
-  std::array<Order, 10000> orders{};
+  std::array<Order, 15000> orders{};
 
 
 
