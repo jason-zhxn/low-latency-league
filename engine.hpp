@@ -8,8 +8,8 @@
 
 enum class Side : uint8_t { BUY, SELL };
 
-inline constexpr uint32_t MIN_PRICE = 3500;
-// inline constexpr uint32_t MIN_PRICE = 0;
+// inline constexpr uint32_t MIN_PRICE = 3500;
+inline constexpr uint32_t MIN_PRICE = 0;
 inline constexpr uint32_t PRICE_RANGE = 1000;
 
 using IdType = uint32_t;
@@ -30,11 +30,11 @@ struct Order {
 struct PriceLevel{
   unsigned int index = 0;
   unsigned int size = 0;
-  std::vector<Order*> orders{};
+  std::vector<IdType> orders{};
   unsigned int volume=0;
 
   PriceLevel(){
-    orders.reserve(1000);
+    orders.reserve(13000);
   }
 };
 
@@ -53,8 +53,6 @@ struct Orderbook {
   std::array<uint64_t, NUM_WORDS> buyBitmap{};
   std::array<uint64_t, NUM_WORDS> sellBitmap{};
 
-
-
   int minSellIndex = PRICE_RANGE;
   int maxSellIndex= 0;
 
@@ -62,16 +60,6 @@ struct Orderbook {
   int maxBuyIndex = 0;
   
   std::array<Order, 15000> orders{};
-
-
-
-  // ~Orderbook() {
-  //   for (auto& order : orders) {
-  //     if (order != nullptr) {
-  //       delete order;
-  //     }
-  //   }
-  // }
 };
 
 extern "C" {

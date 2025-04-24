@@ -35,21 +35,22 @@ template <typename Condition>
 inline __attribute__((always_inline, hot)) uint32_t process_buy_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
 
   auto &meta  = ob.sellBitmap;          // we consume sells
-  int idx     = next_filled(meta, minIndex, maxIndex);
+  int idx    = next_filled(meta, minIndex, maxIndex);
 
   uint32_t matchCount = 0;
   while (idx <= maxIndex && orderQuantity && cond(idx + MIN_PRICE, order.price)){
-    auto &priceLevel= ob.sellOrders[idx];
+    auto &priceLevel = ob.sellOrders[idx];
     auto& ordersList = priceLevel.orders;
 
     for (long unsigned int index = priceLevel.index ;index < ordersList.size() && orderQuantity > 0;index++) {
-      auto currOrder = ordersList[index];
-      QuantityType trade = std::min(orderQuantity, currOrder->quantity);
+      Order& currOrder = ob.orders[ordersList[index]];
+      QuantityType trade = std::min(orderQuantity, currOrder.quantity);
       orderQuantity -= trade;
       priceLevel.volume -= trade;
-      currOrder->quantity -= trade;
+      currOrder.quantity -= trade;
+
       ++matchCount;
-      if (currOrder->quantity == 0)
+      if (currOrder.quantity == 0)
         priceLevel.index++;
     }
 
@@ -80,13 +81,13 @@ inline __attribute__((always_inline,hot)) uint32_t process_sell_orders(const Ord
     auto& ordersList = priceLevel.orders;
 
     for (long unsigned int index = priceLevel.index ;index < ordersList.size() && orderQuantity > 0;index++) {
-      auto currOrder = ordersList[index];
-      QuantityType trade = std::min(orderQuantity, currOrder->quantity);
+      Order& currOrder = ob.orders[ordersList[index]];
+      QuantityType trade = std::min(orderQuantity, currOrder.quantity);
       orderQuantity -= trade;
       priceLevel.volume -= trade;
-      currOrder->quantity -= trade;
+      currOrder.quantity -= trade;
       ++matchCount;
-      if (currOrder->quantity == 0)
+      if (currOrder.quantity == 0)
         priceLevel.index++;
     }
 
@@ -105,9 +106,6 @@ inline __attribute__((always_inline,hot)) uint32_t process_sell_orders(const Ord
 }
 
 uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
-
-  
-
   uint32_t matchCount = 0;
   QuantityType quantity= incoming.quantity;
    // Create a copy to modify the quantity
@@ -118,13 +116,12 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
       // Order* order = new Order(incoming);
       Order &order = orderbook.orders[incoming.id];
       order.side  = Side::BUY;
-      order.id = incoming.id;
       order.price = incoming.price;
       
 
       order.quantity = quantity;
       int index = PRICE_RANGE - (order.price-MIN_PRICE);
-      orderbook.buyOrders[index].orders.emplace_back(&order);
+      orderbook.buyOrders[index].orders.emplace_back(incoming.id);
       orderbook.buyOrders[index].volume += quantity;
       set_bit(orderbook.buyBitmap,index);
       orderbook.minBuyIndex = std::min(orderbook.minBuyIndex, index);
@@ -137,12 +134,10 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
       // Order* order = new Order(incoming);
       Order& order = orderbook.orders[incoming.id];
       order.price = incoming.price;
-      order.id = incoming.id;
       order.side = Side::SELL;
       order.quantity = quantity;
-
       int index = order.price-MIN_PRICE;
-      orderbook.sellOrders[index].orders.emplace_back(&order);
+      orderbook.sellOrders[index].orders.emplace_back(incoming.id);
       orderbook.sellOrders[index].volume += quantity;
       set_bit(orderbook.sellBitmap,index);
 
@@ -185,7 +180,6 @@ uint32_t get_volume_at_level(Orderbook &ob, Side side,
 
 
     return ob.sellOrders[quantity-MIN_PRICE].volume;
-    
     
 
 }
