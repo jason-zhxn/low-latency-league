@@ -3,16 +3,18 @@
 #include <optional>
 #include <stdexcept>
 #include <memory>
-#include <iostream>
 
 
 
-inline void set_bit(std::array<uint64_t,NUM_WORDS>& bm, int idx)   { bm[idx>>6] |=  1ULL << (idx & 63); }
-inline void clear_bit(std::array<uint64_t,NUM_WORDS>& bm, int idx) { bm[idx>>6] &= ~(1ULL << (idx & 63)); }
 
-int next_filled(const std::array<uint64_t,NUM_WORDS>& bm, int start, int max)
+inline __attribute__((always_inline, hot)) void set_bit(std::array<uint64_t,NUM_WORDS>& bm, int& idx)   {
+   bm[idx>>6] |=  1ULL << (idx & 63); }
+inline __attribute__((always_inline,hot)) void clear_bit(std::array<uint64_t,NUM_WORDS>& bm, int& idx) { 
+  bm[idx>>6] &= ~(1ULL << (idx & 63)); }
+
+inline __attribute__((always_inline,hot)) int next_filled(const std::array<uint64_t,NUM_WORDS>& bm, int& start, int& max)
 {
-    int w = start >> 6;
+    unsigned int w = start >> 6;
     uint64_t word = bm[w] & (~0ULL << (start & 63));   // mask bits < start
 
     while (true) {
@@ -21,7 +23,7 @@ int next_filled(const std::array<uint64_t,NUM_WORDS>& bm, int start, int max)
         ++w;                              // advance to next word
         int idx = w << 6;
         if (idx > max || w >= 16) return max + 1;   // sentinel “none”
-        word = bm[w];                     // examine next 64‑level chunk
+        word = bm[w];                   // examine next 64‑level chunk
     }
 }
 
@@ -30,7 +32,7 @@ int next_filled(const std::array<uint64_t,NUM_WORDS>& bm, int start, int max)
 // The Condition predicate takes the price level and the incoming order price
 // and returns whether the level qualifies.
 template <typename Condition>
-uint32_t process_buy_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
+inline __attribute__((always_inline, hot)) uint32_t process_buy_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
 
   auto &meta  = ob.sellBitmap;          // we consume sells
   int idx     = next_filled(meta, minIndex, maxIndex);
@@ -67,7 +69,7 @@ uint32_t process_buy_orders(const Order &order, Orderbook& ob, Condition cond, Q
 
 
 template < typename Condition>
-uint32_t process_sell_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
+inline __attribute__((always_inline,hot)) uint32_t process_sell_orders(const Order &order, Orderbook& ob, Condition cond, QuantityType& orderQuantity, int& minIndex, int& maxIndex) {
   auto &meta  = ob.buyBitmap;          
   int idx     = next_filled(meta, minIndex, maxIndex);
 
@@ -131,9 +133,6 @@ uint32_t match_order(Orderbook &orderbook, const Order &incoming) {
   } 
   else { // Side::SELL
     matchCount = process_sell_orders(incoming, orderbook, std::greater_equal<>(), quantity, orderbook.minBuyIndex, orderbook.maxBuyIndex);
-          // if (orderbook.sellOrders[order->price].orders.size() > 12150){
-      //   std::cout << orderbook.sellOrders[order->price].orders.size() << std::endl;
-      // }
     if (quantity > 0){
       // Order* order = new Order(incoming);
       Order& order = orderbook.orders[incoming.id];
@@ -161,11 +160,12 @@ void modify_order_by_id(Orderbook &orderbook, IdType order_id,
                         QuantityType new_quantity) {
 
   // might have to check for existence
-  if (order_id<orderbook.orders.size()){
+  if (order_id<orderbook.orders.size() && orderbook.orders[order_id].quantity>0){
     
     int q = orderbook.orders[order_id].quantity;
     if (orderbook.orders[order_id].side == Side::BUY) {
-      orderbook.buyOrders[PRICE_RANGE - (orderbook.orders[order_id].price - MIN_PRICE)].volume -= (q-new_quantity);
+      int index = PRICE_RANGE - (orderbook.orders[order_id].price - MIN_PRICE);
+      orderbook.buyOrders[index].volume -= (q-new_quantity);
     } else {
       orderbook.sellOrders[orderbook.orders[order_id].price - MIN_PRICE].volume -= (q-new_quantity);
     } 
@@ -193,9 +193,11 @@ uint32_t get_volume_at_level(Orderbook &ob, Side side,
 // Functions below here don't need to be performant. Just make sure they're
 // correct
 Order lookup_order_by_id(Orderbook &orderbook, IdType order_id) {
+
   if (order_id<orderbook.orders.size() && orderbook.orders[order_id].quantity>0){
     return orderbook.orders[order_id];
   }
+
   throw std::runtime_error("Order not found");
 }
 

@@ -34,7 +34,7 @@ struct PriceLevel{
   unsigned int volume=0;
 
   PriceLevel(){
-    orders.reserve(10000);
+    orders.reserve(1000);
   }
 };
 
@@ -56,10 +56,10 @@ struct Orderbook {
 
 
   int minSellIndex = PRICE_RANGE;
-  int maxSellIndex= -1;
+  int maxSellIndex= 0;
 
   int minBuyIndex = PRICE_RANGE;
-  int maxBuyIndex = -1;
+  int maxBuyIndex = 0;
   
   std::array<Order, 15000> orders{};
 

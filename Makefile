@@ -1,7 +1,8 @@
 CXX = g++
-CXXFLAGS = -std=c++23 -Wall -Wextra -O3
+CXXFLAGS = -std=c++17 -Wall -Wextra -O3
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
 
 all: test
 
