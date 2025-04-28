@@ -1,1 +1,1 @@
-Low Latency Optimized Orderbook project 
+Optimized orderbook/matching engine project 
